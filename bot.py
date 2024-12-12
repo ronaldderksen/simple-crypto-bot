@@ -430,11 +430,20 @@ def add_missing(cur, symbol):
   sell_rows = get_sell_rows(cur, symbol)
   buy_rows = get_buy_rows(cur, symbol)
 
+  if len(sell_rows) == 0 and len(buy_rows) == 0:
+    print('No buy and sell rows')
+    return
+
   i=len(sell_rows)
   if i > config['grid_up']:
     result = exchange.cancelOrder(id=sell_rows[i-1]['id'], symbol=symbol)
-  elif i > 0:
-    sell_price = sell_rows[i-1]['price']
+  else:
+    if i == 0:
+      sell_price = buy_rows[len(buy_rows)-1]['price']
+      sell_price = sell_price + (sell_price/100*config['grid_percentage'])
+      print('CHECK: sell_price=', sell_price)
+    else:
+      sell_price = sell_rows[i-1]['price']
     while i<config['grid_up']:
       sell_price = sell_price + (sell_price/100*config['grid_percentage'])
       i=i+1
@@ -447,8 +456,13 @@ def add_missing(cur, symbol):
   i=len(buy_rows)
   if i > config['grid_down']:
     result = exchange.cancelOrder(id=buy_rows[0]['id'], symbol=symbol)
-  elif i > 0:
-    buy_price = buy_rows[0]['price']
+  else:
+    if i == 0:
+      buy_price = sell_rows[0]['price']
+      buy_price = buy_price - (buy_price/100*config['grid_percentage'])
+      print('CHECK: buy_price=', buy_price)
+    else:
+      buy_price = buy_rows[0]['price']
     while i<config['grid_down']:
       buy_price = buy_price - (buy_price/100*config['grid_percentage'])
       i=i+1
