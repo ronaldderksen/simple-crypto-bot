@@ -105,45 +105,26 @@ def update_all_profit(cur, symbol):
 
 def my_buy_order(symbol, amount, price, params):
   ret = False
-  s = symbol.split('/')
-  base = s[0]
-  quote = s[1]
+  line = 'amount=' + "%10.4f" % amount + ' price=' + "%10.4f" % price
   try:
-    free = balances['free'][quote]
-  except:
-    free = 0
-  line = 'base=' + "%5s" % base + ' amount=' + "%10.4f" % amount + ' price=' + "%10.4f" % price + " free=" + "%10.4f" % free
-  if free >= (amount*price):
-    try:
-      ret = exchange.create_limit_buy_order (symbol, amount, price, params)
-      print ( ' BUY: ' + line )
-    except Exception as e:
-      print ( ' ERROR BUY: ' + line )
-      print(e)
-      ret = False
-  else:
-    print ( ' NOT ENOUGH BALANCE FOR BUY: ' + line )
+    ret = exchange.create_limit_buy_order (symbol, amount, price, params)
+    print ( ' BUY: ' + line )
+  except Exception as e:
+    print ( ' ERROR BUY: ' + line )
+    print(e)
+    ret = False
   return ret
 
 def my_sell_order(symbol, amount, price, params):
   ret = False
-  s = symbol.split('/')
-  base = s[0]
+  line = 'amount=' + "%10.4f" % amount + ' price=' + "%10.4f" % price
   try:
-    free = balances['free'][base]
-  except:
-    free = 0
-  line = 'base=' + "%5s" % base + ' amount=' + "%10.4f" % amount + ' price=' + "%10.4f" % price + " free=" + "%10.4f" % free
-  if free >= amount:
-    try:
-      ret = exchange.create_limit_sell_order (symbol, amount, price, params)
-      print ( 'SELL: ' + line )
-    except Exception as e:
-      print ( 'ERROR SELL: ' + line )
-      print(e)
-      ret = False
-  else:
-    print ( 'NOT ENOUGH BALANCE FOR SELL: ' + line )
+    ret = exchange.create_limit_sell_order (symbol, amount, price, params)
+    print ( 'SELL: ' + line )
+  except Exception as e:
+    print ( 'ERROR SELL: ' + line )
+    print(e)
+    ret = False
   return ret
 
 def insert_order(cur, order):
@@ -167,6 +148,7 @@ def print_order(order, msg=''):
   o['price'] = order['price']
   o['status'] = order['status']
   o['timestamp'] = order['timestamp']
+  o['lastTradeTimestamp'] = order['lastTradeTimestamp']
   print(msg + ' Order:', o)
 
 def update_orders_table(cur, symbol):
@@ -353,7 +335,9 @@ def print_grid(cur, symbol):
     prev=row
 
 def create_other_orders(cur, symbol):
-  cur.execute('select * from orders where status = "closed" and other_created=0 order by lastTradeTimestamp')
+  s = int(time.time()-300)*1000
+  values=(s,)
+  cur.execute('select * from orders where status = "closed" and other_created=0 and lastTradeTimestamp > ? order by lastTradeTimestamp', values)
   rows=cur.fetchall()
   order_created = False
   for r in rows:
@@ -452,6 +436,8 @@ def add_missing(cur, symbol):
       order = my_sell_order (symbol, amount, sell_price, { })
       if order:
         insert_order(cur, order)
+      else:
+        break
 
   i=len(buy_rows)
   if i > config['grid_down']:
@@ -470,6 +456,8 @@ def add_missing(cur, symbol):
       order = my_buy_order (symbol, amount, buy_price, { })
       if order:
         insert_order(cur, order)
+      else:
+        break
 
 def cancel_and_create_orders(cur, symbol):
   print("Canceling all orders and create fresh grid")
@@ -494,6 +482,8 @@ def cancel_and_create_orders(cur, symbol):
     order = my_buy_order (symbol, amount, buy_price, { })
     if order:
       insert_order(cur, order)
+    else:
+      break
 
   sell_price = avg_ticker
   for i in range(config['grid_up']):
@@ -507,6 +497,8 @@ def cancel_and_create_orders(cur, symbol):
     order = my_sell_order (symbol, amount, sell_price, { })
     if order:
       insert_order(cur, order)
+    else:
+      break
 
 def load_config():
   global config
@@ -631,16 +623,15 @@ while True:
   else:
     grid_errors = grid_errors + 1
     print ('grid_errors=', grid_errors)
-    print_grid(cur, symbol)
-    print('')
 
   if grid_errors > 5:
     print('errors in grid, exiting')
     cancel_and_create_orders(cur, symbol)
     grid_errors = 0
     time.sleep(60)
-
   
+  print_grid(cur, symbol)
+  print('')
   time.sleep(5)
   #print('')
   #sys.exit()
