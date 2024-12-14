@@ -12,6 +12,7 @@ import time
 import threading
 import os
 import signal
+import requests
 
 def create_table(cur):
   #cur.execute('DROP TABLE if exists orders')
@@ -140,7 +141,7 @@ def update_order(cur, order):
   cur.execute('UPDATE orders SET timestamp=?, lastTradeTimestamp=?, symbol=?, type=?, side=?, price=?, \
                amount=?, status=?,  ccxt_order=? WHERE id=?', values)
 
-def print_order(order, msg=''):
+def print_order(order, msg='', notify=False):
   o={}
   o['side'] = order['side']
   o['id'] = order['id']
@@ -149,7 +150,11 @@ def print_order(order, msg=''):
   o['status'] = order['status']
   o['timestamp'] = order['timestamp']
   o['lastTradeTimestamp'] = order['lastTradeTimestamp']
-  print(msg + ' Order:', o)
+  msg2 = msg + ' Order: ' + str(o)
+  #print(msg + ' Order:', o)
+  print(msg2)
+  if notify:
+    ntfy(msg2)
 
 def update_orders_table(cur, symbol):
   exchange_id = config['exchange']['exchange_id']
@@ -342,7 +347,7 @@ def create_other_orders(cur, symbol):
   order_created = False
   for r in rows:
     if r['side'] == 'sell':
-      print_order(r,'CLOSED')
+      print_order(r,'CLOSED', True)
       #price = r['price'] - (r['price']/100*config['grid_percentage'])
       price = r['price'] - (r['price']/(100-config['grid_percentage'])*config['grid_percentage'])
       in_quote = r['price']*r['amount']
@@ -358,7 +363,7 @@ def create_other_orders(cur, symbol):
 #        values=(r['id'],)
 #        cur.execute('update orders set other_created=1 WHERE id=?', values)
     if r['side'] == 'buy':
-      print_order(r,'CLOSED')
+      print_order(r,'CLOSED', True)
       #price = r['price'] + (r['price']/100*config['grid_percentage'])
       price = r['price'] + (r['price']/(100-config['grid_percentage'])*config['grid_percentage'])
       amount = r['amount']
@@ -374,8 +379,6 @@ def create_other_orders(cur, symbol):
 #        values=(r['id'],)
 #        cur.execute('update orders set other_created=1 WHERE id=?', values)
   if len(rows) > 0:
-    print_grid(cur, symbol)
-    print_summary(cur, symbol)
     update_orders_table(cur, symbol)
 
 
@@ -533,6 +536,7 @@ def printf(format, *args):
   print(format % args)
 
 def print_summary(cur, symbol):
+  global prev_profit
   print('')
   r = {}
   r[config['base']] = {}
@@ -556,7 +560,13 @@ def print_summary(cur, symbol):
   values=(symbol,)
   cur.execute("select sum(profit) from profit where symbol=?;", values)
   row = cur.fetchone()
-  print ('Profit for ' + config['base'] + '/' + config['quote'] + " on " + config['exchange']['exchange_id'] + ":",  row[0], config['quote'])
+  try: prev_profit
+  except: prev_profit = 0
+  if row[0] != prev_profit:
+    msg = 'Profit for ' + config['base'] + '/' + config['quote'] + " on " + config['exchange']['exchange_id'] + ":",  row[0], config['quote']
+    print (msg)
+    ntfy (msg)
+  prev_profit = row[0]
 
 def shutdown():
   print ('Shutting down')
@@ -570,6 +580,9 @@ def interrupt_handler(signum, frame):
     except:
       pass
     sys.exit(0)
+
+def ntfy(msg):
+  requests.post("https://ntfy.sh/scb", data=str(msg).encode(encoding='utf-8'))
 
 signal.signal(signal.SIGINT, interrupt_handler)
 signal.signal(signal.SIGTERM, interrupt_handler)
@@ -588,6 +601,8 @@ exchange = exchange_class({
 })
 
 symbol = config['base'] + '/' + config['quote']
+
+ntfy('Start SCP symbol='+symbol)
 
 con = sqlite3.connect(exchange_id + "-" + config['base'] + "-" + config['quote'] + ".db", isolation_level=None)
 con.row_factory = sqlite3.Row
@@ -631,6 +646,7 @@ while True:
     time.sleep(60)
   
   print_grid(cur, symbol)
+  print_summary(cur, symbol)
   print('')
   time.sleep(5)
   #print('')
