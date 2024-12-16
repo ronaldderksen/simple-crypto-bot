@@ -104,28 +104,47 @@ def update_all_profit(cur, symbol):
   for row in cur.fetchall():
     update_profit(cur, symbol, row['sell_id'])
 
-def my_buy_order(symbol, amount, price, params):
+def my_buy_order(symbol, amount, price, params, skip_bal_check=False):
   ret = False
-  line = 'amount=' + "%10.4f" % amount + ' price=' + "%10.4f" % price
+  s = symbol.split('/')
+  base = s[0]
+  quote = s[1]
   try:
-    ret = exchange.create_limit_buy_order (symbol, amount, price, params)
-    print ( ' BUY: ' + line )
-  except Exception as e:
-    print ( ' ERROR BUY: ' + line )
-    print(e)
-    ret = False
+    free = balances['free'][quote]
+  except:
+    free = 0
+  line = 'base=' + "%5s" % base + ' amount=' + "%10.4f" % amount + ' price=' + "%10.4f" % price + " free=" + "%10.4f" % free
+  if free >= (amount*price) or skip_bal_check:
+    try:
+      ret = exchange.create_limit_buy_order (symbol, amount, price, params)
+      print ( ' BUY: ' + line )
+    except Exception as e:
+      print ( ' ERROR BUY: ' + line )
+      print(e)
+      ret = False
+  else:
+    print ( ' NOT ENOUGH BALANCE FOR BUY: ' + line )
   return ret
 
-def my_sell_order(symbol, amount, price, params):
+def my_sell_order(symbol, amount, price, params, skip_bal_check=False):
   ret = False
-  line = 'amount=' + "%10.4f" % amount + ' price=' + "%10.4f" % price
+  s = symbol.split('/')
+  base = s[0]
   try:
-    ret = exchange.create_limit_sell_order (symbol, amount, price, params)
-    print ( 'SELL: ' + line )
-  except Exception as e:
-    print ( 'ERROR SELL: ' + line )
-    print(e)
-    ret = False
+    free = balances['free'][base]
+  except:
+    free = 0
+  line = 'base=' + "%5s" % base + ' amount=' + "%10.4f" % amount + ' price=' + "%10.4f" % price + " free=" + "%10.4f" % free
+  if free >= amount or skip_bal_check:
+    try:
+      ret = exchange.create_limit_sell_order (symbol, amount, price, params)
+      print ( 'SELL: ' + line )
+    except Exception as e:
+      print ( 'ERROR SELL: ' + line )
+      print(e)
+      ret = False
+  else:
+    print ( 'NOT ENOUGH BALANCE FOR SELL: ' + line )
   return ret
 
 def insert_order(cur, order):
@@ -353,7 +372,7 @@ def create_other_orders(cur, symbol):
       in_quote = r['price']*r['amount']
       profit = update_profit(cur, symbol, r['id'])
       amount = (in_quote-profit)/price
-      order = my_buy_order (symbol, amount, price, { })
+      order = my_buy_order (symbol, amount, price, { }, True)
       if order:
         values=(r['id'],)
         cur.execute('update orders set other_created=1 WHERE id=?', values)
@@ -367,7 +386,7 @@ def create_other_orders(cur, symbol):
       #price = r['price'] + (r['price']/100*config['grid_percentage'])
       price = r['price'] + (r['price']/(100-config['grid_percentage'])*config['grid_percentage'])
       amount = r['amount']
-      order = my_sell_order (symbol, amount, price, { })
+      order = my_sell_order (symbol, amount, price, { }, True)
       if order:
         values=(r['id'],)
         cur.execute('update orders set other_created=1 WHERE id=?', values)
@@ -419,7 +438,7 @@ def add_missing(cur, symbol):
 
   if len(sell_rows) == 0 and len(buy_rows) == 0:
     print('No buy and sell rows')
-    return
+    return False
 
   i=len(sell_rows)
   if i > config['grid_up']:
@@ -466,6 +485,7 @@ def cancel_and_create_orders(cur, symbol):
   print("Canceling all orders and create fresh grid")
   cancel_orders(symbol)
   cur.execute("update orders set status='unknown' where status = 'open'")
+  cur.execute("update orders set other_created=1")
   avg_orders = avg_price(cur, symbol)
   avg_ticker = (ticker['bid'] + ticker['ask']) / 2
 
