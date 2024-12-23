@@ -104,6 +104,26 @@ def update_all_profit(cur, symbol):
   for row in cur.fetchall():
     update_profit(cur, symbol, row['sell_id'])
 
+def buy_allowed(symbol, amount, price):
+  cur.execute("select sum(amount*price) from orders where status='open' and side='buy'")
+  row = cur.fetchone()
+  if row[0]:
+    in_orders = row[0]
+  else:
+    in_orders = 0
+
+  this = amount * ticker['last']
+  s = symbol.split('/')
+  base = s[0]
+  balance = balances['total'][base] * ticker['last']
+
+  if (this + balance + in_orders) > config['budget']:
+    print('Over budget (',config['budget'], ') this=', this, ' balance=', balance, ' in_orders=', in_orders, 'total=', (this + balance + in_orders))
+    return False
+  else:
+    return True
+
+
 def my_buy_order(symbol, amount, price, params, skip_bal_check=False):
   ret = False
   s = symbol.split('/')
@@ -114,7 +134,10 @@ def my_buy_order(symbol, amount, price, params, skip_bal_check=False):
   except:
     free = 0
   line = 'base=' + "%5s" % base + ' amount=' + "%10.4f" % amount + ' price=' + "%10.4f" % price + " free=" + "%10.4f" % free
-  if free >= (amount*price) or skip_bal_check:
+  if not skip_bal_check and not buy_allowed(symbol, amount, price):
+    print(' BUY: Over budget')
+    ret = False
+  elif free >= (amount*price) or skip_bal_check:
     try:
       ret = exchange.create_limit_buy_order (symbol, amount, price, params)
       print ( ' BUY: ' + line )
@@ -164,13 +187,13 @@ def print_order(order, msg='', notify=False):
   o={}
   o['side'] = order['side']
   o['id'] = order['id']
+  o['symbol'] = order['symbol']
   o['amount'] = order['amount']
   o['price'] = order['price']
   o['status'] = order['status']
   o['timestamp'] = order['timestamp']
   o['lastTradeTimestamp'] = order['lastTradeTimestamp']
   msg2 = msg + ' Order: ' + str(o)
-  #print(msg + ' Order:', o)
   print(msg2)
   if notify:
     ntfy(msg2)
@@ -301,6 +324,10 @@ def check_grid(cur, symbol):
   else:
     lowest_sell_price = avg_ticker
     highest_sell_price = avg_ticker
+
+  if len(sell_rows) == 0 and len(buy_rows) == 0:
+    print('No buy and sell rows')
+    return False
 
   diff = lowest_sell_price - highest_buy_price
   max_diff = 2.5*(lowest_sell_price/100*config['grid_percentage'])
@@ -534,6 +561,9 @@ def load_config():
 
   try: config['order_amount']
   except: config['order_amount'] = 50
+
+  try: config['budget']
+  except: config['budget'] = 500
 
   try: config['max_distance_up']
   except: config['max_distance_up'] = 20
