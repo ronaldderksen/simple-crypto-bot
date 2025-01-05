@@ -196,7 +196,7 @@ def print_order(order, msg='', notify=False):
   msg2 = msg + ' Order: ' + str(o)
   print(msg2)
   if notify:
-    ntfy(msg2)
+    ntfy('order', msg2)
 
 def update_orders_table(cur, symbol):
   exchange_id = config['exchange']['exchange_id']
@@ -613,9 +613,9 @@ def print_summary(cur, symbol):
   try: prev_profit
   except: prev_profit = 0
   if row[0] != prev_profit:
-    msg = 'Profit for ' + config['base'] + '/' + config['quote'] + " on " + config['exchange']['exchange_id'] + ":",  row[0], config['quote']
+    msg = 'Profit for ' + config['base'] + '/' + config['quote'] + " on " + config['exchange']['exchange_id'] + ": " + str(row[0]) + ' ' + config['quote']
     print (msg)
-    ntfy (msg)
+    ntfy ('profit', msg)
   prev_profit = row[0]
 
 def shutdown():
@@ -631,8 +631,24 @@ def interrupt_handler(signum, frame):
       pass
     sys.exit(0)
 
-def ntfy(msg):
-  requests.post("https://ntfy.sh/scb", data=str(msg).encode(encoding='utf-8'))
+def ntfy(topic, msg):
+  myobj = {
+    'token': 'simple-crypto-bot',
+    'topic': topic,
+    'msg': msg
+  }
+#  try:
+#    requests.post("https://ntfy.sh/scb", data=str(msg).encode(encoding='utf-8'))
+#  except Exception as e:
+#    print(e)
+  try:
+    requests.post('https://ntfyme.net/msg', json = myobj)
+  except Exception as e:
+    print(e)
+#  try:
+#    requests.post('http://192.168.12.40:8080/msg', json = myobj)
+#  except Exception as e:
+#    print(e)
 
 signal.signal(signal.SIGINT, interrupt_handler)
 signal.signal(signal.SIGTERM, interrupt_handler)
@@ -652,7 +668,7 @@ exchange = exchange_class({
 
 symbol = config['base'] + '/' + config['quote']
 
-ntfy('Start SCP symbol='+symbol)
+ntfy('start','Start SCP symbol='+symbol)
 
 con = sqlite3.connect(exchange_id + "-" + config['base'] + "-" + config['quote'] + ".db", isolation_level=None)
 con.row_factory = sqlite3.Row
