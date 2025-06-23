@@ -185,18 +185,19 @@ def update_order(cur, order):
 
 def print_order(order, msg='', notify=False):
   o={}
+  o['topic'] = 'order'
   o['side'] = order['side']
-  o['id'] = order['id']
+  #o['id'] = order['id']
   o['symbol'] = order['symbol']
   o['amount'] = order['amount']
   o['price'] = order['price']
   o['status'] = order['status']
-  o['timestamp'] = order['timestamp']
-  o['lastTradeTimestamp'] = order['lastTradeTimestamp']
+  #o['timestamp'] = order['timestamp']
+  #o['lastTradeTimestamp'] = order['lastTradeTimestamp']
   msg2 = msg + ' Order: ' + str(o)
   print(msg2)
   if notify:
-    ntfy('order', msg2)
+    ntfy(json.dumps(o))
 
 def update_orders_table(cur, symbol):
   exchange_id = config['exchange']['exchange_id']
@@ -405,9 +406,9 @@ def create_other_orders(cur, symbol):
         cur.execute('update orders set other_created=1 WHERE id=?', values)
         insert_order(cur, order)
         order_created = True
-#      else:
-#        values=(r['id'],)
-#        cur.execute('update orders set other_created=1 WHERE id=?', values)
+      else:
+        values=(r['id'],)
+        cur.execute('update orders set other_created=1 WHERE id=?', values)
     if r['side'] == 'buy':
       print_order(r,'CLOSED', True)
       #price = r['price'] + (r['price']/100*config['grid_percentage'])
@@ -421,9 +422,9 @@ def create_other_orders(cur, symbol):
         values = (r['id'], order['id'])
         con.execute('insert into pairs (buy_id, sell_id) values (?,?)', values)
         order_created = True
-#      else:
-#        values=(r['id'],)
-#        cur.execute('update orders set other_created=1 WHERE id=?', values)
+      else:
+        values=(r['id'],)
+        cur.execute('update orders set other_created=1 WHERE id=?', values)
   if len(rows) > 0:
     update_orders_table(cur, symbol)
 
@@ -592,6 +593,10 @@ def print_summary(cur, symbol):
   r[config['base']] = {}
   r[config['quote']] = {}
   for a in ('free', 'used', 'total'):
+    try:
+      balances[config['base']]
+    except:
+      balances[config['base']] = { "free": 0, "used": 0, "total": 0 }
     bal = "%12.5f" % (balances[config['base']][a])
     in_quote = "%7.2f" % (ticker['last'] * balances[config['base']][a])
     r[config['base']]["%5s" % a] = { config['base']: bal, config['quote']: in_quote }
@@ -613,9 +618,17 @@ def print_summary(cur, symbol):
   try: prev_profit
   except: prev_profit = 0
   if row[0] != prev_profit:
-    msg = 'Profit for ' + config['base'] + '/' + config['quote'] + " on " + config['exchange']['exchange_id'] + ": " + str(row[0]) + ' ' + config['quote']
-    print (msg)
-    ntfy ('profit', msg)
+    #msg = 'Profit for ' + config['base'] + '/' + config['quote'] + " on " + config['exchange']['exchange_id'] + ": " + str(row[0]) + ' ' + config['quote']
+    msg = {}
+    msg['topic'] = 'profit'
+    try:
+      msg['profit'] = "%0.2f" % row[0] + ' ' + config['quote']
+    except:
+      msg['profit'] = "0"
+    msg['symbol'] = config['base'] + '/' + config['quote']
+    msg['exchange'] = config['exchange']['exchange_id']
+    print (str(msg))
+    ntfy (json.dumps(msg))
   prev_profit = row[0]
 
 def shutdown():
@@ -631,22 +644,15 @@ def interrupt_handler(signum, frame):
       pass
     sys.exit(0)
 
-def ntfy(topic, msg):
-  myobj = {
-    'token': 'simple-crypto-bot',
-    'topic': topic,
-    'msg': msg
-  }
-#  try:
-#    requests.post("https://ntfy.sh/scb", data=str(msg).encode(encoding='utf-8'))
-#  except Exception as e:
-#    print(e)
+def ntfy(msg):
+  print('msg='+str(msg))
   try:
-    requests.post('https://ntfyme.net/msg', json = myobj)
+    r = requests.post('https://ntfyme.net/msg', data = str(msg), headers = {'Authorization': 'Bearer 79725558-4ec7-4c86-a9e3-f7ea9228fb78'})
+    print(r.text)
   except Exception as e:
     print(e)
 #  try:
-#    requests.post('http://192.168.12.40:8080/msg', json = myobj)
+#    requests.post('http://192.168.12.40:8080/msg', data = str(msg))
 #  except Exception as e:
 #    print(e)
 
@@ -668,7 +674,7 @@ exchange = exchange_class({
 
 symbol = config['base'] + '/' + config['quote']
 
-ntfy('start','Start SCP symbol='+symbol)
+ntfy('Start SCP symbol='+symbol)
 
 con = sqlite3.connect(exchange_id + "-" + config['base'] + "-" + config['quote'] + ".db", isolation_level=None)
 con.row_factory = sqlite3.Row
