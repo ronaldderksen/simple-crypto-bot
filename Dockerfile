@@ -10,7 +10,7 @@ WORKDIR /app
 
 USER scb
 
-RUN pip3 install ccxt==4.4.26
+RUN pip3 install ccxt==4.4.90
 
 COPY bot.py /app
 

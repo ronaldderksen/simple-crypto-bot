@@ -666,10 +666,15 @@ args = parser.parse_args()
 load_config()
 
 exchange_id = config['exchange']['exchange_id']
+if exchange_id == 'bitvavo':
+  options = { 'operatorId': 91070, }
+else:
+  options = {}
 exchange_class = getattr(ccxt, exchange_id)
 exchange = exchange_class({
   'apiKey': config['exchange']['key'],
   'secret': config['exchange']['secret'],
+  'options': options,
 })
 
 symbol = config['base'] + '/' + config['quote']
