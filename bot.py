@@ -629,20 +629,25 @@ def print_summary(cur, symbol):
   values=(symbol,)
   cur.execute("select sum(profit) from profit where symbol=?;", values)
   row = cur.fetchone()
-  try: prev_profit
-  except: prev_profit = 0
-  if row[0] != prev_profit:
-    #msg = 'Profit for ' + config['base'] + '/' + config['quote'] + " on " + config['exchange']['exchange_id'] + ": " + str(row[0]) + ' ' + config['quote']
-    msg = {}
-    msg['topic'] = 'profit'
-    try:
-      msg['profit'] = "%0.2f" % row[0] + ' ' + config['quote']
-    except:
-      msg['profit'] = "0"
-    msg['symbol'] = config['base'] + '/' + config['quote']
-    msg['exchange'] = config['exchange']['exchange_id']
-    print (str(msg))
-    ntfy (json.dumps(msg))
+  try:
+    prev_profit
+    prev_defined = True
+  except NameError:
+    prev_defined = False
+
+  if prev_defined:
+    if row[0] != prev_profit:
+      msg = {}
+      msg['topic'] = 'profit'
+      try:
+        msg['profit'] = "%0.2f" % row[0] + ' ' + config['quote']
+      except Exception:
+        msg['profit'] = "0"
+      msg['symbol'] = config['base'] + '/' + config['quote']
+      msg['exchange'] = config['exchange']['exchange_id']
+      print(str(msg))
+      ntfy(json.dumps(msg))
+  # Always update baseline after check so first run does not notify
   prev_profit = row[0]
 
 def shutdown():
