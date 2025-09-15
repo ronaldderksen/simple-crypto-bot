@@ -27,7 +27,7 @@ def create_table(cur):
     price NUMERIC, \
     amount NUMERIC, \
     status TEXT, \
-    ccxt_order, TEXT, \
+    ccxt_order TEXT, \
     other_created BOOLEAN NOT NULL DEFAULT 0 CHECK (other_created IN (0, 1)) \
   );')
   cur.execute('create table if not exists pairs ( \
@@ -45,7 +45,7 @@ def create_table(cur):
     sell_amount NUMERIC, \
     sell_fee NUMERIC, \
     buy_id TEXT, \
-    sell_id TEX, \
+    sell_id TEXT, \
     PRIMARY KEY (buy_id, sell_id) \
     );')
 
@@ -212,8 +212,18 @@ def update_orders_table(cur, symbol):
       check[order['id']] = True
   else:
     open_orders = exchange.fetchOpenOrders(symbol=symbol, since=s, limit=l)
-    closed_orders =  exchange.fetchClosedOrders(symbol=symbol, since=s, limit=l)
-    canceled_orders = exchange.fetchCanceledOrders(symbol=symbol, since=s, limit=l)
+    closed_orders = []
+    canceled_orders = []
+    try:
+      if exchange.has.get('fetchClosedOrders'):
+        closed_orders = exchange.fetchClosedOrders(symbol=symbol, since=s, limit=l)
+    except Exception as _:
+      pass
+    try:
+      if exchange.has.get('fetchCanceledOrders'):
+        canceled_orders = exchange.fetchCanceledOrders(symbol=symbol, since=s, limit=l)
+    except Exception as _:
+      pass
     for order in open_orders+closed_orders+canceled_orders:
       update_order(cur, order)
       check[order['id']] = True
@@ -445,8 +455,12 @@ def update_balances_ticker(symbol):
         total_quote = total_quote + balances['total'][k]
       else:
         t = k+'/'+config['quote']
-        last = tickers[t]['last']
-        total_quote = total_quote + (balances['total'][k] * last)
+        try:
+          last = tickers[t]['last']
+          total_quote = total_quote + (balances['total'][k] * last)
+        except Exception:
+          # Skip assets without a direct quote pair in tickers
+          pass
   try:
     config['order_amount_perc']
     config['order_amount'] = (total_quote/100) * config['order_amount_perc']
@@ -647,7 +661,15 @@ def interrupt_handler(signum, frame):
 def ntfy(msg):
   print('msg='+str(msg))
   try:
-    r = requests.post('https://ntfyme.net/msg', data = str(msg), headers = {'Authorization': 'Bearer 79725558-4ec7-4c86-a9e3-f7ea9228fb78'})
+    payload = msg if isinstance(msg, str) else json.dumps(msg)
+    r = requests.post(
+      'https://ntfyme.net/msg',
+      data=payload,
+      headers={
+        'Authorization': 'Bearer 79725558-4ec7-4c86-a9e3-f7ea9228fb78',
+        'Content-Type': 'application/json'
+      }
+    )
     print(r.text)
   except Exception as e:
     print(e)
@@ -679,7 +701,7 @@ exchange = exchange_class({
 
 symbol = config['base'] + '/' + config['quote']
 
-ntfy('Start SCP symbol='+symbol)
+ntfy(json.dumps({"topic": "start", "symbol": symbol}))
 
 con = sqlite3.connect(exchange_id + "-" + config['base'] + "-" + config['quote'] + ".db", isolation_level=None)
 con.row_factory = sqlite3.Row
