@@ -647,12 +647,19 @@ def print_summary(cur, symbol):
     r[config['quote']]["%5s" % a] = { config['quote']: bal }
   pprint.pp(r, width=200)
   #print("Balances for " + config['quote'] + ":", balances[config['quote']])
-  fee = exchange.fetchTradingFee(symbol, {})
+  fee_info = None
   try:
-    del fee['info']['capabilities']
-  except:
-    pass
-  pprint.pp(fee['info'], width=200)
+    fee = exchange.fetchTradingFee(symbol, {})
+    fee_info = fee.get('info', {})
+  except ccxt.NetworkError as e:
+    print(f'Failed to fetch trading fee (network): {e}')
+  except ccxt.BaseError as e:
+    # Avoid crashing the summary on unexpected exchange errors
+    print(f'Failed to fetch trading fee: {e}')
+
+  if fee_info:
+    fee_info.pop('capabilities', None)
+    pprint.pp(fee_info, width=200)
 
   values=(symbol,)
   cur.execute("select sum(profit) from profit where symbol=?;", values)
