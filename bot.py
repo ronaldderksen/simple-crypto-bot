@@ -17,6 +17,19 @@ import requests
 
 
 def fatal_error(msg):
+  try:
+    payload = {
+      'topic': 'error',
+      'message': str(msg),
+    }
+    try:
+      payload['symbol'] = symbol
+      payload['exchange'] = config['exchange']['exchange_id']
+    except Exception:
+      pass
+    ntfy(json.dumps(payload))
+  except Exception as notify_error:
+    print(notify_error)
   print(msg)
   traceback.print_stack()
   sys.exit(1)
