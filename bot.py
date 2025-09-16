@@ -4,6 +4,7 @@ import json
 import yaml
 import re
 import ccxt
+import traceback
 import pprint
 import sys
 import argparse
@@ -13,6 +14,13 @@ import threading
 import os
 import signal
 import requests
+
+
+def fatal_error(msg):
+  print(msg)
+  traceback.print_stack()
+  sys.exit(1)
+
 
 def create_table(cur):
   #cur.execute('DROP TABLE if exists orders')
@@ -319,7 +327,14 @@ def in_range(cur, symbol):
 
 def check_grid(cur, symbol):
   ret = True
-  avg_ticker = (ticker['bid'] + ticker['ask']) / 2
+  bid = ticker.get('bid')
+  ask = ticker.get('ask')
+  if bid is None or ask is None:
+    avg_ticker = ticker.get('last')
+    if avg_ticker is None:
+      fatal_error('Unable to determine ticker price in check_grid')
+  else:
+    avg_ticker = (bid + ask) / 2
   buy_rows = get_buy_rows(cur, symbol)
   if len(buy_rows) > 0:
     loweset_buy_price = buy_rows[0]['price']
